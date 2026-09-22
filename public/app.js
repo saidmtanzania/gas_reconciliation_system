@@ -129,7 +129,7 @@ async function process() {
     $('mofatInfo').textContent = `Uploaded ${mf.name}`; $('lakeInfo').textContent = `Uploaded ${lf.name}`;
     render(payload);
     loadHistory();
-    alert(`Saved as batch #${payload.batchId} in the SQLite database.`);
+    alert(`Saved as batch #${payload.batchId} in the PostgreSQL database.`);
   } catch (e) {
     alert('Upload error: ' + e.message);
   } finally {

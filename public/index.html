@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Gas Reconciliation System (SQLite)</title>
+<title>Gas Reconciliation System (PostgreSQL)</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
   :root{--bg:#0f172a;--panel:#111827;--card:#1f2937;--muted:#94a3b8;--text:#e5e7eb;--line:#334155;--green:#22c55e;--yellow:#f59e0b;--red:#ef4444;}
@@ -101,7 +101,7 @@
   </section>
   <section id="history" class="page"><div class="card"><h2>Saved Batches</h2><div class="small" style="margin-bottom:10px">Every processed run is stored in the local SQLite database. Click a batch to reload it.</div><div id="historyList"></div></div></section>
 
-  <div class="footer">Gas Reconciliation System | Node.js + Express + SQLite (better-sqlite3) | data/reconciliation.db</div>
+  <div class="footer">Gas Reconciliation System | Node.js + Express + PostgreSQL</div>
 </div>
 <script src="app.js"></script>
 </body>
