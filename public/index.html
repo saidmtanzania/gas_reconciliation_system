@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Gas Reconciliation System (SQLite)</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root{--bg:#0f172a;--panel:#111827;--card:#1f2937;--muted:#94a3b8;--text:#e5e7eb;--line:#334155;--green:#22c55e;--yellow:#f59e0b;--red:#ef4444;}
+  *{box-sizing:border-box} body{margin:0;font-family:Inter,Arial,sans-serif;background:#0b1120;color:var(--text)}
+  header{padding:22px 28px;background:linear-gradient(135deg,#0f172a,#1e293b);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:4}
+  h1{margin:0;font-size:24px}.sub{color:var(--muted);margin-top:6px;font-size:13px}
+  .wrap{padding:22px;max-width:1500px;margin:0 auto}.grid{display:grid;gap:16px}.grid2{grid-template-columns:repeat(2,minmax(0,1fr))}.grid3{grid-template-columns:repeat(3,minmax(0,1fr))}.grid4{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .card{background:rgba(31,41,55,.9);border:1px solid var(--line);border-radius:16px;padding:16px;box-shadow:0 12px 30px rgba(0,0,0,.15)}
+  .card h2{font-size:16px;margin:0 0 12px}
+  label{font-size:12px;color:#cbd5e1;display:block;margin:9px 0 5px} input,select,textarea,button{font-family:inherit}
+  input,select,textarea{width:100%;border:1px solid var(--line);border-radius:10px;background:#0f172a;color:var(--text);padding:10px;font-size:13px} textarea{min-height:120px;resize:vertical;line-height:1.5}
+  button{border:0;border-radius:12px;background:#2563eb;color:#fff;padding:11px 14px;font-weight:700;cursor:pointer}button.secondary{background:#334155}button:disabled{opacity:.55;cursor:not-allowed}
+  .kpi{padding:15px;border-radius:14px;background:#0f172a;border:1px solid var(--line)}.kpi .v{font-size:23px;font-weight:800;margin-top:4px}.kpi .l{font-size:12px;color:var(--muted)}
+  .status{border-radius:16px;padding:16px 18px;font-weight:700;line-height:1.6}.pass{background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.5);color:#bbf7d0}.warns{background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.55);color:#fde68a}.fail{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.55);color:#fecaca}
+  .tabs{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0}.tab{background:#111827;border:1px solid var(--line);padding:10px 12px;border-radius:999px;cursor:pointer;color:#cbd5e1}.tab.active{background:#2563eb;color:white;border-color:#2563eb}
+  .page{display:none}.page.active{display:block}.tablewrap{overflow:auto;max-height:540px;border:1px solid var(--line);border-radius:12px}table{border-collapse:collapse;width:100%;font-size:12px;min-width:850px}th,td{padding:9px 10px;border-bottom:1px solid #263244;text-align:left;white-space:nowrap}th{position:sticky;top:0;background:#111827;color:#cbd5e1;z-index:1}tr:hover{background:#172033}.right{text-align:right}.pill{padding:4px 8px;border-radius:999px;font-weight:700;font-size:11px;display:inline-block}.p-green{background:rgba(34,197,94,.16);color:#bbf7d0}.p-yellow{background:rgba(245,158,11,.16);color:#fde68a}.p-red{background:rgba(239,68,68,.16);color:#fecaca}
+  .note{background:#0f172a;border-left:4px solid #38bdf8;border-radius:12px;padding:12px;color:#cbd5e1;font-size:13px;line-height:1.6}
+  .chartbox{height:300px}.copyarea{width:100%;min-height:145px;background:#0f172a;border:1px solid var(--line);border-radius:12px;color:var(--text);padding:12px;line-height:1.5}
+  .histrow{display:flex;justify-content:space-between;align-items:center;padding:10px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;cursor:pointer}
+  .histrow:hover{background:#172033}.histrow small{color:var(--muted)}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .remarkInput{min-width:220px;padding:7px;border-radius:8px}
+  .footer{color:#64748b;font-size:12px;margin-top:18px;text-align:center}
+  @media(max-width:900px){.grid2,.grid3,.grid4{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Gas Reconciliation System</h1>
+  <div class="sub">Upload Mofat + Lake Gas Excel files, reconcile, and persist every run in a local SQLite database.</div>
+</header>
+<div class="wrap">
+
+  <div class="grid grid3">
+    <div class="card"><h2>1. Upload Mofat Data</h2><input id="mofatFile" type="file" accept=".xlsx,.xls,.csv" /><div class="small" id="mofatInfo">No file selected.</div></div>
+    <div class="card"><h2>2. Upload Lake Gas Data</h2><input id="lakeFile" type="file" accept=".xlsx,.xls,.csv" /><div class="small" id="lakeInfo">No file selected.</div></div>
+    <div class="card"><h2>3. Run & Save</h2><label>Batch name (optional)</label><input id="batchName" placeholder="e.g. June 2026 reconciliation" /><button id="runBtn" style="margin-top:10px">Process & Save to Database</button></div>
+  </div>
+
+  <div class="card" style="margin-top:16px"><h2>Configuration</h2>
+    <div class="grid grid4">
+      <div><label>Gas price per KG (TZS)</label><input id="gasPrice" type="number" value="3250" /></div>
+      <div><label>Bus capacity per fill (KG)</label><input id="busCapacity" type="number" value="200" /></div>
+      <div><label>Variance tolerance per bus (KG)</label><input id="varianceTol" type="number" value="2" step="0.01" /></div>
+      <div><label>Duplicate alert threshold (fillings/day)</label><input id="dupThreshold" type="number" value="4" /></div>
+    </div>
+    <div class="small" style="margin-top:10px" id="fleetSummary">Fleet master: loading...</div>
+    <div class="small">Manage the Planned/Backup/Reserve bus list permanently in the <b>Fleet Master</b> tab — it applies to every future upload.</div>
+  </div>
+
+  <div id="statusBar" class="status warns" style="margin-top:16px">Upload both files, then click Process & Save to Database.</div>
+
+  <div class="grid grid4" style="margin-top:16px" id="kpis"></div>
+
+  <div class="tabs">
+    <div class="tab active" data-page="summary">Executive Summary</div>
+    <div class="tab" data-page="daily">Daily Recon</div>
+    <div class="tab" data-page="shift">Shift Recon</div>
+    <div class="tab" data-page="bus">Bus Recon</div>
+    <div class="tab" data-page="fleet">Fleet Monitoring</div>
+    <div class="tab" data-page="exceptions">Exceptions & Audit</div>
+    <div class="tab" data-page="finance">Financial Verification</div>
+    <div class="tab" data-page="fleetmaster">Fleet Master</div>
+    <div class="tab" data-page="history">Saved Batches (Database)</div>
+  </div>
+
+  <section id="summary" class="page active">
+    <div class="grid grid2"><div class="card"><h2>Variance Trend by Date</h2><div class="chartbox"><canvas id="trendChart"></canvas></div></div><div class="card"><h2>Fleet Category KG</h2><div class="chartbox"><canvas id="fleetChart"></canvas></div></div></div>
+    <div class="card" style="margin-top:16px"><h2>Management Summary</h2><div class="note" id="mgmtSummary">No data processed yet.</div></div>
+    <div class="card" style="margin-top:16px"><h2>Email-Ready Management Summary</h2><textarea id="mgmtEmail" class="copyarea" readonly>No data processed yet.</textarea>
+      <div class="toolbar" style="margin-top:8px"><button class="secondary" id="copySummaryBtn">Copy Email Summary</button><button class="secondary" id="printBtn">Print / Save as PDF</button></div>
+    </div>
+  </section>
+  <section id="daily" class="page"><div class="card"><h2>Daily Reconciliation</h2><div class="tablewrap" id="dailyTable"></div></div></section>
+  <section id="shift" class="page"><div class="card"><h2>Shift Reconciliation</h2><div class="tablewrap" id="shiftTable"></div></div></section>
+  <section id="bus" class="page"><div class="card"><h2>Bus Reconciliation</h2><div class="tablewrap" id="busTable"></div></div></section>
+  <section id="fleet" class="page"><div class="grid grid2"><div class="card"><h2>Fleet Usage</h2><div class="tablewrap" id="fleetTable"></div></div><div class="card"><h2>Fill Frequency by Bus/Day</h2><div class="tablewrap" id="freqTable"></div></div></div></section>
+  <section id="exceptions" class="page"><div class="grid grid2"><div class="card"><h2>Missing / Unmatched Records</h2><div class="tablewrap" id="missingTable"></div></div><div class="card"><h2>Audit Exceptions</h2><div class="toolbar" style="margin-bottom:10px"><button class="btn-green-alt secondary" id="autoFixBtn">Auto-Fix All Suffix Typos</button></div><div class="tablewrap" id="auditTable"></div></div></div></section>
+  <section id="finance" class="page"><div class="card"><h2>Invoice Approval Report</h2><div class="tablewrap" id="financeTable"></div></div></section>
+  <section id="fleetmaster" class="page">
+    <div class="card"><h2>Add / Update a Bus</h2>
+      <div class="grid grid3">
+        <div><label>Bus plate</label><input id="fleetBusInput" placeholder="e.g. T 624 ENS" /></div>
+        <div><label>Category</label><select id="fleetCatInput"><option>Planned</option><option>Backup</option><option>Reserve</option></select></div>
+        <div><label>&nbsp;</label><button id="fleetAddBtn">Save Bus</button></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px"><h2>Bulk Import</h2>
+      <div class="grid grid3">
+        <div style="grid-column:span 2"><label>Paste bus plates (one per line, or comma-separated)</label><textarea id="fleetBulkInput"></textarea></div>
+        <div><label>Category</label><select id="fleetBulkCat"><option>Planned</option><option>Backup</option><option>Reserve</option></select><button id="fleetBulkBtn" style="margin-top:10px">Import List</button></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px"><h2>Current Fleet Master</h2><div class="tablewrap" id="fleetMasterTable"></div></div>
+  </section>
+  <section id="history" class="page"><div class="card"><h2>Saved Batches</h2><div class="small" style="margin-bottom:10px">Every processed run is stored in the local SQLite database. Click a batch to reload it.</div><div id="historyList"></div></div></section>
+
+  <div class="footer">Gas Reconciliation System | Node.js + Express + SQLite (better-sqlite3) | data/reconciliation.db</div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
