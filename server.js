@@ -38,6 +38,20 @@ async function loadFleetMaster() {
   return { map, numberIndex, textByCategory };
 }
 
+async function insertRows(client, table, columns, rows, toValues) {
+  const chunkSize = 500;
+  for (let start = 0; start < rows.length; start += chunkSize) {
+    const chunk = rows.slice(start, start + chunkSize);
+    const values = [];
+    const placeholders = chunk.map((row, rowIndex) => {
+      const rowValues = toValues(row);
+      values.push(...rowValues);
+      return `(${columns.map((_, columnIndex) => `$${rowIndex * columns.length + columnIndex + 1}`).join(',')})`;
+    }).join(',');
+    await client.query(`INSERT INTO ${table} (${columns.join(',')}) VALUES ${placeholders}`, values);
+  }
+}
+
 async function reprocessBatch(id) {
   const { rows: batches } = await db.query('SELECT * FROM batches WHERE id=$1', [id]);
   if (!batches[0]) return null;
@@ -88,9 +102,9 @@ app.post('/api/reconcile', upload.fields([{ name: 'mofatFile', maxCount: 1 }, { 
     const batchId = await db.withTransaction(async client => {
       const inserted = await client.query('INSERT INTO batches (name,mofat_filename,lake_filename,gas_price,bus_capacity,variance_tol,dup_threshold,planned_buses,backup_buses,reserve_buses) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id', [name, mofatFile.originalname, lakeFile.originalname, +gasPrice, +busCapacity, +varianceTol, +dupThreshold, textByCategory.Planned.join('\n'), textByCategory.Backup.join('\n'), textByCategory.Reserve.join('\n')]);
       const id = inserted.rows[0].id;
-      for (const row of mofatRows) await client.query('INSERT INTO mofat_records (batch_id,date,bus,bus_display,driver,km,gas,time_in,time_out,shift,category,src_row,matched) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)', [id, row.date, row.bus, row.busDisplay, row.driver, row.km, row.gas, row.timeIn, row.timeOut, row.shift, row.category, row.row, row.matched ? 1 : 0]);
-      for (const row of lakeRows) await client.query('INSERT INTO lake_records (batch_id,date,bus,bus_display,recipient,pod,station,gas,shift,category,src_row,matched) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)', [id, row.date, row.bus, row.busDisplay, row.recipient, row.pod, row.station, row.gas, row.shift, row.category, row.row, row.matched ? 1 : 0]);
-      for (const row of matches) await client.query('INSERT INTO matches (batch_id,date,bus,bus_display,category,shift,mofat_kg,lake_kg,variance,abs_variance,mofat_row,lake_row,pod) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)', [id, row.date, row.bus, row.busDisplay, row.category, row.shift, row.mofatKg, row.lakeKg, row.variance, row.absVariance, row.mofatRow, row.lakeRow, row.pod]);
+      await insertRows(client, 'mofat_records', ['batch_id', 'date', 'bus', 'bus_display', 'driver', 'km', 'gas', 'time_in', 'time_out', 'shift', 'category', 'src_row', 'matched'], mofatRows, row => [id, row.date, row.bus, row.busDisplay, row.driver, row.km, row.gas, row.timeIn, row.timeOut, row.shift, row.category, row.row, row.matched ? 1 : 0]);
+      await insertRows(client, 'lake_records', ['batch_id', 'date', 'bus', 'bus_display', 'recipient', 'pod', 'station', 'gas', 'shift', 'category', 'src_row', 'matched'], lakeRows, row => [id, row.date, row.bus, row.busDisplay, row.recipient, row.pod, row.station, row.gas, row.shift, row.category, row.row, row.matched ? 1 : 0]);
+      await insertRows(client, 'matches', ['batch_id', 'date', 'bus', 'bus_display', 'category', 'shift', 'mofat_kg', 'lake_kg', 'variance', 'abs_variance', 'mofat_row', 'lake_row', 'pod'], matches, row => [id, row.date, row.bus, row.busDisplay, row.category, row.shift, row.mofatKg, row.lakeKg, row.variance, row.absVariance, row.mofatRow, row.lakeRow, row.pod]);
       return id;
     });
     res.json(await getBatchPayload(batchId));
